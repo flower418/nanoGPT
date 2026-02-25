@@ -5,9 +5,9 @@ from torch.nn import functional as F
 # hyperparameters
 batch_size = 32
 block_size = 8
-max_iters = 3000
-eval_interval = 300
-learning_rate = 1e-2
+max_iters = 5000
+eval_interval = 500
+learning_rate = 1e-3
 eval_iters = 200
 n_embd = 32 # 词向量的维度，表示用多少个特征来描述一个词
 device = "cuda" if torch.cuda.is_available() else "cpu"
