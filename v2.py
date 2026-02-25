@@ -9,7 +9,7 @@ max_iters = 3000
 eval_interval = 300
 learning_rate = 1e-2
 eval_iters = 200
-n_embd = 32
+n_embd = 32 # 词向量的维度，表示用多少个特征来描述一个词
 device = "cuda" if torch.cuda.is_available() else "cpu"
 # ---------------
 
@@ -54,12 +54,35 @@ def estimate_loss():
     model.train() # back to train mode
     return out
 
+class Head(nn.Module):
+    
+    def __init__(self, head_size):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
+        
+    def forward(self, x):
+        B,T,C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+        v = self.value(x)
+        
+        wei = q @ k.transpose(-2, -1) * C**-0.5
+        wei = wei.masked_fill(self.tril[:T,:T] == 0, float("-inf")) # (B,T,T)
+        wei = F.softmax(wei, dim=-1)
+        
+        out = wei @ v # (B,T,T) @ (B,T,C)
+        return out
+
 class BigramLanguageModel(nn.Module):
     
     def __init__(self):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.sa_head = Head(n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)
         
     def forward(self, idx, targets=None):
@@ -67,7 +90,9 @@ class BigramLanguageModel(nn.Module):
         B, T = idx.shape
         tok_emb = self.token_embedding_table(idx) # (B, T, C)，包含了属性特征，根据属性特征去预测下一个词
         pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,C)
+        
         x = tok_emb + pos_emb # (B,T,C)
+        x = self.sa_head(x)
         logits = self.lm_head(x) # (B, T, vocab_size)，输入的词向量再经过线性层预测下一层的得分
         
         if (targets is None):
@@ -83,7 +108,8 @@ class BigramLanguageModel(nn.Module):
     def generate(self, idx, max_new_tokens):
         # idx is (B, T)
         for _ in range(max_new_tokens):
-            logits, loss = self(idx)
+            idx_cond = idx[:,-block_size:] # 只考虑最后的 block_size 个，因为 position_embedding 只能编码 block_size 个
+            logits, loss = self(idx_cond)
             # focus only on the last time step
             logits = logits[:, -1, :] # (B, C)
             probs = F.softmax(logits, dim=-1) # (B, C)
