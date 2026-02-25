@@ -59,12 +59,16 @@ class BigramLanguageModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.position_embedding_table = nn.Embedding(block_size, n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)
         
     def forward(self, idx, targets=None):
         # idx and targets are both (B, T)
-        tok_emb = self.token_embedding_table(idx) # (B, T, C)
-        logits = self.lm_head(tok_emb) # (B, T, vocab_size)
+        B, T = idx.shape
+        tok_emb = self.token_embedding_table(idx) # (B, T, C)，包含了属性特征，根据属性特征去预测下一个词
+        pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,C)
+        x = tok_emb + pos_emb # (B,T,C)
+        logits = self.lm_head(x) # (B, T, vocab_size)，输入的词向量再经过线性层预测下一层的得分
         
         if (targets is None):
             loss = None
