@@ -84,6 +84,18 @@ class MultiHeadAttention(nn.Module):
         
     def forward(self, x):
         return torch.cat([h(x) for h in self.heads], dim=-1) # 拓展每个词的特征维度
+    
+class FeedForward(nn.Module):
+    
+    def __init__(self, n_embd):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_embd, n_embd),
+            nn.ReLU(),
+        )
+        
+    def forward(self, x):
+        return self.net(x)
 
 class BigramLanguageModel(nn.Module):
     
@@ -92,6 +104,7 @@ class BigramLanguageModel(nn.Module):
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
         self.sa_head = MultiHeadAttention(4, n_embd//4)
+        self.ffwd = FeedForward(n_embd)
         self.lm_head = nn.Linear(n_embd, vocab_size)
         
     def forward(self, idx, targets=None):
@@ -102,6 +115,7 @@ class BigramLanguageModel(nn.Module):
         
         x = tok_emb + pos_emb # (B,T,C)
         x = self.sa_head(x)
+        x = self.ffwd(x)
         logits = self.lm_head(x) # (B, T, vocab_size)，输入的词向量再经过线性层预测下一层的得分
         
         if (targets is None):
